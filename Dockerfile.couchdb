@@ -1,0 +1,19 @@
+FROM couchdb:3.3.2
+
+# Environment variables will be provided through docker-compose
+ENV COUCHDB_USER=admin
+ENV COUCHDB_PASSWORD=mpc123
+
+# Copy custom configuration if needed
+COPY ./docker/local.ini /opt/couchdb/etc/local.d/
+
+# Expose the default CouchDB port
+EXPOSE 5984
+
+# Create required directories and set permissions
+USER root
+RUN mkdir -p /opt/couchdb/data /opt/couchdb/etc/local.d && \
+    chown -R couchdb:couchdb /opt/couchdb
+
+# Switch back to couchdb user for security
+USER couchdb

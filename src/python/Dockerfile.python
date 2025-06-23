@@ -1,0 +1,22 @@
+# src/python/Dockerfile.python
+
+# Use uma imagem base do Python oficial.
+FROM python:3.11-slim
+
+# Instala o Tesseract-OCR, uma dependência do pdf_processor.py
+RUN apt-get update && apt-get install -y tesseract-ocr && rm -rf /var/lib/apt/lists/*
+
+# Define o diretório de trabalho dentro do contêiner.
+WORKDIR /app
+
+# Copia o arquivo de dependências primeiro para aproveitar o cache do Docker.
+COPY requirements.txt .
+
+# Instala as dependências do Python, agora com a flag --upgrade no comando.
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --upgrade -r requirements.txt
+
+# Copia todos os outros arquivos do diretório src/python para o diretório de trabalho /app no contêiner.
+COPY . .
+
+# O comando para rodar a aplicação será definido no docker-compose.yml.

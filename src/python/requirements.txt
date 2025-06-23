@@ -1,0 +1,14 @@
+requests
+beautifulsoup4
+PyMuPDF
+pytesseract
+Pillow
+python-dotenv
+schedule
+flask
+loguru
+langchain
+langchain-google-genai
+langchain-text-splitters 
+qdrant-client==1.9.0
+fastembed
