@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:80"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=/api
+    networks:
+      - app-network
+    depends_on:
+      - rag-api
+
+  rag-api:
+    build:
+      context: ./src/python
+      dockerfile: Dockerfile.python
+    command: flask --app rag_api run --host=0.0.0.0 --port=5001
+    ports:
+      - "5001:5001"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    networks:
+      - app-network
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - app-network
+    
+  python-updater:
+    build:
+      context: ./src/python
+      dockerfile: Dockerfile.python
+    volumes:
+      - python_data:/app/pdfs
+      - python_texts:/app/extracted_texts
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: "no"
+    command: >
+      sh -c "python main.py"
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  qdrant_data:
+  python_data:
+  python_texts:
