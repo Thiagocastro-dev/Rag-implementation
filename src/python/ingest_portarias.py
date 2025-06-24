@@ -17,7 +17,10 @@ class IngestPortarias:
     def __init__(self, pdf_dir="/app/pdfs", text_dir="/app/extracted_texts"):
         self.pdf_dir = pdf_dir
         self.text_dir = text_dir
-        self.qdrant_client = QdrantClient(url=settings.QDRANT_URL)
+        self.qdrant_client = QdrantClient(
+            url=settings.QDRANT_URL,
+            timeout=60.0 # Aumenta o timeout para 60 segundos
+        )
         self.collection_name = settings.QDRANT_COLLECTION
         # Define um namespace constante para gerar UUIDs consistentes
         self.NAMESPACE_UUID = uuid.UUID('f8a72360-63f3-b747-b811-ba59d2d65dd9')

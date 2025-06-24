@@ -39,6 +39,11 @@ services:
       - qdrant_data:/qdrant/storage
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
     
   python-updater:
     build:

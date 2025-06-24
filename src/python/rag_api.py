@@ -9,7 +9,10 @@ from langchain_gemini import llm, embed_model
 from settings import settings
 
 app = Flask(__name__)
-qdrant_client = QdrantClient(url=settings.QDRANT_URL)
+qdrant_client = QdrantClient(
+    url=settings.QDRANT_URL,
+    timeout=60.0 # Aumenta o timeout para 60 segundos
+)
 
 # Diretório onde os textos completos extraídos dos PDFs são salvos
 TEXT_DIR = "/app/extracted_texts"
