@@ -26,18 +26,17 @@
     </div>
 
     <PortariaDialog
-      :show="showDialog"
+      v-model="showDialog"
       :portaria="selectedPortaria"
-      @close="showDialog = false"
     />
-  </div>
+    </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import { usePortariaStore } from '../stores/portariaStore';
 import PortariaItem from './portaria/PortariaItem.vue';
-import PortariaDialog from './portaria/PortariaDialog.vue'; // Certifique-se que o caminho está correto
+import PortariaDialog from './portaria/PortariaDialog.vue';
 
 const store = usePortariaStore();
 const showDialog = ref(false);

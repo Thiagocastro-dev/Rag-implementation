@@ -22,6 +22,8 @@ services:
     command: flask --app rag_api run --host=0.0.0.0 --port=5001
     ports:
       - "5001:5001"
+    volumes:
+      - python_texts:/app/extracted_texts # <--- ADICIONAR ESTA LINHA
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     networks:

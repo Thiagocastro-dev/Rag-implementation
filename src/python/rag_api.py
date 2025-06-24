@@ -1,6 +1,7 @@
 import os
 import logging
 import uuid
+import re  # Garanta que esta linha de import exista no topo do arquivo
 from flask import Flask, request, jsonify
 from qdrant_client import QdrantClient
 from langchain_core.prompts import PromptTemplate
@@ -11,15 +12,15 @@ from settings import settings
 app = Flask(__name__)
 qdrant_client = QdrantClient(
     url=settings.QDRANT_URL,
-    timeout=60.0 # Aumenta o timeout para 60 segundos
+    timeout=60.0
 )
 
-# Diretório onde os textos completos extraídos dos PDFs são salvos
 TEXT_DIR = "/app/extracted_texts"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# (O prompt_template e o rag_chain permanecem os mesmos)
 prompt_template = """
 Você é um assistente de pesquisa altamente preciso e especializado em documentos do Ministério Público de Contas do Estado do Pará (MPC-PA). Sua tarefa é responder à pergunta do usuário baseando-se estritamente no contexto das portarias fornecidas.
 
@@ -40,6 +41,7 @@ Você é um assistente de pesquisa altamente preciso e especializado em document
 """
 prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 rag_chain = prompt | llm
+
 
 @app.route('/ask', methods=['POST'])
 def ask_question():
@@ -62,7 +64,6 @@ def ask_question():
 
         context = ""
         sources = []
-        # Usamos o nome do arquivo fonte para evitar duplicatas na lista de fontes
         sources_seen = set()
 
         for doc in found_docs:
@@ -72,8 +73,6 @@ def ask_question():
             
             source_filename = doc.payload['source']
             if source_filename not in sources_seen:
-                # --- CORREÇÃO AQUI ---
-                # O ID enviado para o frontend agora é o nome do arquivo, que usaremos para buscar o texto completo.
                 sources.append({
                     "id": os.path.splitext(source_filename)[0],
                     "title": doc.payload['title']
@@ -93,6 +92,8 @@ def ask_question():
         logger.error(f"Erro na API RAG: {e}", exc_info=True)
         return jsonify({"error": "Ocorreu um erro ao processar sua pergunta."}), 500
 
+
+# --- FUNÇÃO CORRIGIDA ---
 @app.route('/document/<doc_id>', methods=['GET'])
 def get_document(doc_id):
     """
@@ -100,18 +101,20 @@ def get_document(doc_id):
     baseado no seu ID (que é o nome do arquivo sem extensão).
     """
     try:
-        # Monta o caminho para o arquivo de texto completo
-        # Ex: doc_id = "portaria_123-2024" -> filename = "portaria_123-2024.txt"
-        filename = f"{doc_id}.txt"
+        # Sanitiza o ID recebido para corresponder ao nome do arquivo no disco
+        sanitized_doc_id = re.sub(r'[^\w\-_\.]', '_', doc_id)
+        
+        # Usa o ID sanitizado para montar o caminho do arquivo
+        filename = f"{sanitized_doc_id}.txt"
         filepath = os.path.join(TEXT_DIR, filename)
 
         if not os.path.exists(filepath):
-            logger.error(f"Arquivo de texto não encontrado em: {filepath}")
+            logger.error(f"Arquivo de texto NÃO ENCONTRADO em: {filepath}")
+            logger.info(f"(ID original recebido do frontend: '{doc_id}')")
             return jsonify({"error": "Arquivo de texto completo não encontrado no servidor."}), 404
 
         with open(filepath, 'r', encoding='utf-8') as f:
             full_content = f.read()
-            # Remove o prefixo "Text: " se ele existir
             cleaned_content = full_content.split('Text: ', 1)[1].strip() if 'Text: ' in full_content else full_content
 
         response_data = {
@@ -124,6 +127,7 @@ def get_document(doc_id):
     except Exception as e:
         logger.error(f"Erro ao buscar documento {doc_id}: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao buscar o documento."}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)

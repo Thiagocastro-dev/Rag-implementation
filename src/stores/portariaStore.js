@@ -27,32 +27,21 @@ export const usePortariaStore = defineStore('portaria', {
         this.loading = false;
       }
     },
-      async fetchPortariaById(id) {
+      
+    // Apenas a versão correta da função é mantida.
+    async fetchPortariaById(id) {
         this.loading = true;
         this.selectedPortaria = null; // Limpa a seleção anterior
         try {
-            // A API já busca e retorna o documento.
-            // Agora, a ação também retorna os dados para o componente que a chamou.
-            const portaria = await getDocumentById(id); // Supondo que você tem um serviço para isso
+            // A API busca e retorna o documento.
+            // A ação também retorna os dados para o componente que a chamou.
+            const portaria = await getDocumentById(id);
             this.selectedPortaria = portaria;
-            return portaria; // MODIFICAÇÃO: Retorna o documento buscado
+            return portaria; // Retorna o documento buscado
         } catch (error) {
             this.error = 'Falha ao carregar o conteúdo da portaria.';
             console.error(error);
-            return null; // MODIFICAÇÃO: Retorna nulo em caso de erro
-        } finally {
-            this.loading = false;
-        }
-    },
-    
-    async fetchPortariaById(id) {
-        this.loading = true;
-        this.error = null;
-        this.selectedPortaria = null;
-        try {
-            this.selectedPortaria = await getDocumentById(id);
-        } catch (error) {
-            this.error = error.message || 'Falha ao carregar o conteúdo da portaria.';
+            return null; // Retorna nulo em caso de erro
         } finally {
             this.loading = false;
         }
