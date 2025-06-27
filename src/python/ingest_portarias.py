@@ -1,6 +1,6 @@
 import os
 import logging
-import uuid # Importa a biblioteca para gerar UUIDs
+import uuid
 from langchain_core.documents import Document
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import PointStruct, UpdateStatus
@@ -19,20 +19,16 @@ class IngestPortarias:
         self.text_dir = text_dir
         self.qdrant_client = QdrantClient(
             url=settings.QDRANT_URL,
-            timeout=60.0 # Aumenta o timeout para 60 segundos
+            timeout=60.0
         )
         self.collection_name = settings.QDRANT_COLLECTION
-        # Define um namespace constante para gerar UUIDs consistentes
         self.NAMESPACE_UUID = uuid.UUID('f8a72360-63f3-b747-b811-ba59d2d65dd9')
         
         os.makedirs(self.pdf_dir, exist_ok=True)
         os.makedirs(self.text_dir, exist_ok=True)
 
     def _setup_qdrant_collection(self):
-        """
-        Garante que a coleção exista com os parâmetros corretos,
-        recriando-a se necessário.
-        """
+        """Garante que a coleção exista com os parâmetros corretos."""
         self.qdrant_client.recreate_collection(
             collection_name=self.collection_name,
             vectors_config=models.VectorParams(
@@ -70,14 +66,20 @@ class IngestPortarias:
                 text_file_path = os.path.join(self.text_dir, os.path.splitext(filename)[0] + '.txt')
                 if os.path.exists(text_file_path):
                     with open(text_file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        text_content = content.split('Text: ', 1)[1].strip() if 'Text: ' in content else content
+                        lines = f.readlines()
+                        
+                        # Extrai metadados do arquivo .txt
+                        title = lines[0].replace('Title: ', '').strip()
+                        year_str = lines[1].replace('Year: ', '').strip()
+                        year = int(year_str) if year_str != 'None' else None
+                        content = "".join(lines[2:]).replace('Text: ', '').strip()
 
                     doc = Document(
-                        page_content=text_content,
+                        page_content=content,
                         metadata={
                             "source": filename,
-                            "title": result.get('title', 'Sem título')
+                            "title": title,
+                            "year": year  # Adiciona o ano aos metadados
                         }
                     )
                     all_documents.append(doc)
@@ -92,7 +94,7 @@ class IngestPortarias:
 
         for i in range(0, total_docs, batch_size):
             batch_docs = all_documents[i:i + batch_size]
-            logger.info(f"Processando lote {i//batch_size + 1}/{(total_docs + batch_size - 1)//batch_size} (documentos {i+1} a {i+len(batch_docs)})")
+            logger.info(f"Processando lote {i//batch_size + 1}/{(total_docs + batch_size - 1)//batch_size}")
 
             contents_to_embed = [doc.page_content for doc in batch_docs]
             
@@ -104,10 +106,7 @@ class IngestPortarias:
                     payload = doc.metadata.copy()
                     payload['page_content'] = doc.page_content
 
-                    # --- INÍCIO DA CORREÇÃO DO ID ---
-                    # Gera um UUID consistente baseado no nome do arquivo fonte
                     point_id = str(uuid.uuid5(self.NAMESPACE_UUID, doc.metadata['source']))
-                    # --- FIM DA CORREÇÃO DO ID ---
 
                     point = PointStruct(
                         id=point_id,
@@ -123,7 +122,6 @@ class IngestPortarias:
                 )
                 if operation_info.status != UpdateStatus.COMPLETED:
                     logger.warning(f"O lote {i+1} pode não ter sido salvo corretamente. Status: {operation_info.status}")
-
 
             except Exception as e:
                 logger.error(f"Erro ao processar o lote de documentos {i+1}-{i+len(batch_docs)}: {e}")

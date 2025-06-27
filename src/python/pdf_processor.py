@@ -6,92 +6,92 @@ import os
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
+from langdetect import detect, LangDetectException
 
+# --- AGENTE 1: Lógica de Verificação de Idioma ---
+def is_portuguese(text: str) -> bool:
+    """Verifica se o texto fornecido está em português."""
+    try:
+        # Usa uma amostra do texto para eficiência
+        sample = text[:500] if len(text) > 500 else text
+        if not sample.strip():
+            return False
+        # Retorna True se o idioma detectado for 'pt'
+        return detect(sample) == 'pt'
+    except LangDetectException:
+        # Se a detecção falhar (texto muito curto ou confuso), descarta por segurança.
+        logging.warning("Não foi possível detectar o idioma do texto.")
+        return False
 
-def extract_highlighted_text(page):
-    """Extract text from highlighted areas in a PDF page."""
-    highlights = []
-    for annot in page.annots():
-        if annot.type[0] == 8:  # 8 is the code for a highlight annotation
-            rect = annot.rect
-            text = page.get_textbox(rect).strip()
-            if text:
-                highlights.append(text)
-    return highlights
-
-def extract_title(text):
-    """Extrai o título usando regex do texto da página"""
+# --- INÍCIO DA CORREÇÃO ---
+def extract_title_and_year(text):
+    """Extrai o título e o ano da portaria usando regex."""
+    # CORREÇÃO: Removido o flag inline (?i) para evitar o erro de compilação.
+    # O argumento 'flags=re.IGNORECASE' já lida com a sensibilidade de maiúsculas/minúsculas.
     pattern = re.compile(
-        r'(?i)portaria\s+n[°º]?\s*\d+\s*\/\s*\d+\s*\/\s*mpc\s*\/\s*pa',
+        r'(portaria\s+n[°º]?\s*\d+\s*\/\s*(\d{4})\s*\/\s*mpc\s*\/\s*pa)',
         flags=re.IGNORECASE
     )
     lines = text.split('\n')
     for line in lines:
         line = line.strip()
-        if pattern.search(line):
-            return line
-    return None
+        match = pattern.search(line)
+        if match:
+            title = match.group(1)  # O título completo (1º grupo de captura)
+            year = int(match.group(2)) # O ano (2º grupo de captura)
+            return title, year
+    return "Sem título", None
+# --- FIM DA CORREÇÃO ---
+
 
 def process_single_pdf(pdf_path, output_dir):
-    """Process a single PDF file, extracting the first page and highlighted text."""
+    """Processa um único PDF, aplicando o Agente 1 e extraindo metadados."""
+    filename = os.path.basename(pdf_path)
     try:
-        filename = os.path.basename(pdf_path)
         output_file = os.path.splitext(filename)[0] + '.txt'
         output_path = os.path.join(output_dir, output_file)
         
-        # Open PDF
         with fitz.open(pdf_path) as pdf:
-            text = ""
-            title = ""
-            if pdf.page_count > 0:  # Check if there is at least one page
-                page = pdf[0]  # Get only the first page
-                
-                # Extrair texto nativo
-                page_text = page.get_text()
-                title = extract_title(page_text)
-                
-                # Se não encontrado, tentar OCR
-                if not title:
-                    pix = page.get_pixmap()
-                    img = Image.open(io.BytesIO(pix.tobytes()))
-                    ocr_text = pytesseract.image_to_string(img, lang='por')
-                    title = extract_title(ocr_text)
-                
-                # Fallback para texto destacado
-                if not title:
-                    highlighted_text = extract_highlighted_text(page)
-                    title = highlighted_text[0] if highlighted_text else "Sem título"
-                
-                page_text = page.get_text()
-                
-                # If no text found, use OCR
-                if not page_text.strip():
-                    pix = page.get_pixmap()
-                    img = Image.open(io.BytesIO(pix.tobytes()))
-                    page_text = pytesseract.image_to_string(img, lang='por')
-                
-                text += f"\n--- Página 1 ---\n{page_text}"
+            if not pdf.page_count > 0:
+                logging.warning(f"PDF vazio ou corrompido: {filename}")
+                return {'filename': filename, 'title': 'Error', 'reason': 'PDF Vazio'}
+
+            page = pdf[0]
+            page_text = page.get_text()
             
-            # Save extracted text and title
+            if not page_text.strip():
+                pix = page.get_pixmap()
+                img = Image.open(io.BytesIO(pix.tobytes()))
+                page_text = pytesseract.image_to_string(img, lang='por')
+            
+            # --- Aplicação do AGENTE 1 ---
+            if not is_portuguese(page_text):
+                logging.warning(f"Documento '{filename}' parece não estar em português e será descartado.")
+                return {'filename': filename, 'title': 'Error', 'reason': 'Não está em português'}
+
+            title, year = extract_title_and_year(page_text)
+            
             with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(f"Title: {title}\nText: {text.strip()}")
+                f.write(f"Title: {title}\n")
+                f.write(f"Year: {year}\n")
+                f.write(f"Text: {page_text.strip()}")
                 
-            logging.info(f"Processed: {filename}")
-            return {'filename': filename, 'title': title}
+            logging.info(f"Processado: {filename}")
+            return {'filename': filename, 'title': title, 'year': year}
                     
     except Exception as e:
-        logging.error(f"Error processing {filename}: {str(e)}")
-        return {'filename': filename, 'title': 'Error'}
-    
+        logging.error(f"Erro ao processar {filename}: {str(e)}")
+        return {'filename': filename, 'title': 'Error', 'reason': str(e)}
+
 def process_pdfs(pdf_dir, output_dir, max_workers=3):
     """
-    Process all PDFs in parallel and return titles
+    Processa todos os PDFs em paralelo e retorna os títulos.
     """
     os.makedirs(output_dir, exist_ok=True)
     
     pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
     total_files = len(pdf_files)
-    logging.info(f"Starting to process {total_files} PDF files")
+    logging.info(f"Iniciando o processamento de {total_files} arquivos PDF")
     
     results = []
     success_count = 0
@@ -111,8 +111,8 @@ def process_pdfs(pdf_dir, output_dir, max_workers=3):
                 success_count += 1
                 results.append(result)
             
-            if i % 5 == 0:  # Log progress every 5 files
-                logging.info(f"Processing progress: {i}/{total_files} ({(i/total_files)*100:.1f}%)")
+            if i % 5 == 0:  # Log de progresso a cada 5 arquivos
+                logging.info(f"Progresso do processamento: {i}/{total_files} ({(i/total_files)*100:.1f}%)")
     
-    logging.info(f"PDF processing completed. Successfully processed {success_count} of {total_files} files")
+    logging.info(f"Processamento de PDF concluído. {success_count} de {total_files} arquivos processados com sucesso")
     return results

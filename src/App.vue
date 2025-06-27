@@ -1,4 +1,4 @@
-`<template>
+<template>
   <q-layout view="hHh lpR fFf">
     <q-header elevated class="bg-primary text-white">
       <q-toolbar>
@@ -17,21 +17,42 @@
 
     <q-page-container>
       <q-page padding>
-        <div class="q-pa-md">
-          <SearchBar />
-          <!-- Add PortariasList back to display results -->
-          <PortariasList />
-        </div>
-      </q-page>
+
+        <q-tabs v-model="tab" dense class="text-grey" active-color="primary" indicator-color="primary" align="left" narrow-indicator>
+          <q-tab name="chat" icon="Youtube" label="Chat com Documentos" />
+          <q-tab name="search" icon="travel_explore" label="Busca Semântica" />
+        </q-tabs>
+        <q-separator />
+
+        <q-tab-panels v-model="tab" animated>
+          <q-tab-panel name="chat" class="q-pa-none q-pt-md">
+            <div class="row q-col-gutter-lg">
+              <div class="col-12 col-md-8">
+                <Chat />
+              </div>
+              <div class="col-12 col-md-4">
+                <PortariasList />
+              </div>
+            </div>
+          </q-tab-panel>
+
+          <q-tab-panel name="search" class="q-pa-none q-pt-md">
+            <SemanticSearch />
+          </q-tab-panel>
+        </q-tab-panels>
+        </q-page>
     </q-page-container>
   </q-layout>
 </template>
 
 <script setup>
-import SearchBar from './components/SearchBar.vue';
-import PortariasList from './components/PortariasList.vue'; // Re-added PortariasList import
+import { ref } from 'vue';
+import Chat from './components/Chat.vue';
+import PortariasList from './components/PortariasList.vue';
+// Importa o novo componente
+import SemanticSearch from './components/SemanticSearch.vue'; 
 
-
+const tab = ref('chat');
 </script>
 
 <style>
@@ -46,6 +67,4 @@ import PortariasList from './components/PortariasList.vue'; // Re-added Portaria
 .q-img:hover {
   transform: scale(1.05);
 }
-
-
-</style>`
+</style>

@@ -1,15 +1,18 @@
 import os
 import logging
 import uuid
-import re  # Garanta que esta linha de import exista no topo do arquivo
+import re
 from flask import Flask, request, jsonify
 from qdrant_client import QdrantClient
 from langchain_core.prompts import PromptTemplate
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 
 from langchain_gemini import llm, embed_model
 from settings import settings
 
+
 app = Flask(__name__)
+
 qdrant_client = QdrantClient(
     url=settings.QDRANT_URL,
     timeout=60.0
@@ -17,10 +20,21 @@ qdrant_client = QdrantClient(
 
 TEXT_DIR = "/app/extracted_texts"
 
-logging.basicConfig(level=logging.INFO)
+# Configuração do Logger para registrar eventos e erros.
+logging.basicConfig(level=settings.LOG_LEVEL, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+#
+# --- FIM DA CORREÇÃO ---
 
-# (O prompt_template e o rag_chain permanecem os mesmos)
+
+# Agente 2: Função para extrair o ano
+def extract_year_from_query(query: str):
+    """Extrai um ano de 4 dígitos da string de busca."""
+    match = re.search(r'\b(20\d{2})\b', query)
+    return int(match.group(1)) if match else None
+
+
+# Definição do prompt e da cadeia de RAG
 prompt_template = """
 Você é um assistente de pesquisa altamente preciso e especializado em documentos do Ministério Público de Contas do Estado do Pará (MPC-PA). Sua tarefa é responder à pergunta do usuário baseando-se estritamente no contexto das portarias fornecidas.
 
@@ -52,15 +66,31 @@ def ask_question():
         return jsonify({"error": "Nenhuma pergunta fornecida"}), 400
 
     try:
-        logger.info(f"Buscando documentos para a pergunta: '{question}'")
+        year_constraint = extract_year_from_query(question)
+        query_filter = None
+        limit = settings.RETRIEVAL_LIMIT
+
+        if year_constraint:
+            logger.info(f"Agente 2: Ativando filtro de metadados no Qdrant para o ano: {year_constraint}")
+            query_filter = Filter(
+                must=[
+                    FieldCondition(key="year", match=MatchValue(value=year_constraint))
+                ]
+            )
+            limit = settings.FILTERED_RETRIEVAL_LIMIT
+
+        logger.info(f"Buscando até {limit} docs para: '{question}'")
         found_docs = qdrant_client.search(
             collection_name=settings.QDRANT_COLLECTION,
             query_vector=embed_model.embed_query(question),
-            limit=7
+            query_filter=query_filter,
+            limit=limit
         )
-        
+
         if not found_docs:
             return jsonify({"answer": "Não encontrei nenhuma portaria relevante para responder a sua pergunta.", "sources": []})
+        
+        logger.info(f"Encontrados {len(found_docs)} documentos relevantes.")
 
         context = ""
         sources = []
@@ -93,18 +123,61 @@ def ask_question():
         return jsonify({"error": "Ocorreu um erro ao processar sua pergunta."}), 500
 
 
-# --- FUNÇÃO CORRIGIDA ---
+@app.route('/search', methods=['POST'])
+def search_documents():
+    data = request.get_json()
+    query = data.get('query')
+
+    if not query:
+        return jsonify({"error": "Nenhuma consulta fornecida"}), 400
+
+    try:
+        year_constraint = extract_year_from_query(query)
+        query_filter = None
+        limit = settings.RETRIEVAL_LIMIT
+
+        if year_constraint:
+            logger.info(f"Agente 2: Ativando filtro de metadados no Qdrant para o ano: {year_constraint}")
+            query_filter = Filter(
+                must=[
+                    FieldCondition(key="year", match=MatchValue(value=year_constraint))
+                ]
+            )
+            limit = settings.FILTERED_RETRIEVAL_LIMIT
+        
+        logger.info(f"Buscando até {limit} portarias para: '{query}'")
+        found_docs = qdrant_client.search(
+            collection_name=settings.QDRANT_COLLECTION,
+            query_vector=embed_model.embed_query(query),
+            query_filter=query_filter,
+            limit=limit
+        )
+
+        if not found_docs:
+            return jsonify({"results": []})
+
+        results = []
+        for doc in found_docs:
+            snippet = doc.payload.get('page_content', '')
+            results.append({
+                "id": os.path.splitext(doc.payload['source'])[0],
+                "title": doc.payload['title'],
+                "score": doc.score,
+                "snippet": (snippet[:250] + '...') if len(snippet) > 250 else snippet
+            })
+        
+        return jsonify({"results": results})
+
+    except Exception as e:
+        logger.error(f"Erro na API de busca semântica: {e}", exc_info=True)
+        return jsonify({"error": "Ocorreu um erro ao processar sua busca."}), 500
+
+
 @app.route('/document/<doc_id>', methods=['GET'])
 def get_document(doc_id):
-    """
-    Busca e retorna o CONTEÚDO COMPLETO de um documento
-    baseado no seu ID (que é o nome do arquivo sem extensão).
-    """
     try:
-        # Sanitiza o ID recebido para corresponder ao nome do arquivo no disco
         sanitized_doc_id = re.sub(r'[^\w\-_\.]', '_', doc_id)
         
-        # Usa o ID sanitizado para montar o caminho do arquivo
         filename = f"{sanitized_doc_id}.txt"
         filepath = os.path.join(TEXT_DIR, filename)
 

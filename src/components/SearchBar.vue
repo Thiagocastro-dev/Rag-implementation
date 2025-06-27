@@ -6,9 +6,10 @@
     @keyup.enter="performSearch"
     class="full-width"
     :loading="store.loading"
+    :disable="store.loading"
   >
     <template v-slot:append>
-      <q-icon name="search" @click="performSearch" class="cursor-pointer" />
+      <q-btn dense flat round icon="send" @click="performSearch" :disable="store.loading" />
     </template>
   </q-input>
 </template>
@@ -21,8 +22,9 @@ const searchQuery = ref('');
 const store = usePortariaStore();
 
 const performSearch = () => {
-  if (searchQuery.value.trim()) {
+  if (searchQuery.value.trim() && !store.loading) {
     store.askQuestionRAG(searchQuery.value);
+    searchQuery.value = ''; // Limpa o input após o envio
   }
 };
 </script>
