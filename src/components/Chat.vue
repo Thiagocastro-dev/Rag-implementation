@@ -15,9 +15,12 @@
       <div v-if="store.loading" class="row justify-center q-my-md">
         <q-spinner-dots color="primary" size="2em" />
       </div>
-       <div v-if="store.error" class="row justify-center q-my-md">
-        <q-banner inline-actions class="text-white bg-red">
+       <div v-if="store.error" class="q-px-md q-py-sm">
+        <q-banner inline-actions class="text-white bg-red" rounded>
           {{ store.error }}
+          <template v-slot:action>
+            <q-btn flat color="white" label="Fechar" @click="store.error = null" />
+          </template>
         </q-banner>
       </div>
     </div>

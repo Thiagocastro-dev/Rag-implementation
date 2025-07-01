@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-// Adiciona a nova função do service
 import { askQuestion, getDocumentById, searchOrdinances } from '../services/ragService';
 
 export const usePortariaStore = defineStore('portaria', {
@@ -10,12 +9,10 @@ export const usePortariaStore = defineStore('portaria', {
     error: null,
     selectedPortaria: null,
 
-    // --- INÍCIO DA NOVA FUNCIONALIDADE ---
     // Estado da Busca Semântica
     semanticSearchResults: [],
     searchLoading: false,
     searchError: null,
-    // --- FIM DA NOVA FUNCIONALIDADE ---
   }),
 
   getters: {
@@ -39,14 +36,13 @@ export const usePortariaStore = defineStore('portaria', {
         this.conversation.push({ type: 'ai', text: response.answer, sources: response.sources });
       } catch (e) {
         this.error = e.message;
-        this.conversation.push({ type: 'error', text: e.message });
       } finally {
         this.loading = false;
       }
     },
       
     async fetchPortariaById(id) {
-        this.loading = true; // Pode ser um loading genérico ou um específico
+        this.loading = true;
         this.selectedPortaria = null;
         try {
             const portaria = await getDocumentById(id);
@@ -65,7 +61,6 @@ export const usePortariaStore = defineStore('portaria', {
         this.selectedPortaria = null;
     },
 
-    // --- INÍCIO DA NOVA FUNCIONALIDADE ---
     // Ação da Busca Semântica
     async performSemanticSearch(query) {
       this.searchLoading = true;
@@ -80,6 +75,5 @@ export const usePortariaStore = defineStore('portaria', {
         this.searchLoading = false;
       }
     },
-    // --- FIM DA NOVA FUNCIONALIDADE ---
   },
 });
